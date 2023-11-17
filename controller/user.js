@@ -209,7 +209,7 @@ const deleteUser = async(req,res,next)=>{
 }
 
 //TODO 1
-const getUserByToken = async(req,res,next)=>{
+//const getUserByToken = async(req,res,next)=>{
   //tugas lengkapi codingan
   //hanya user yang telah login bisa mengambil data dirinya dengan mengirimkan token
   //step 1 ambil token
@@ -218,7 +218,137 @@ const getUserByToken = async(req,res,next)=>{
 
   //step 3 cari user berdasarkan payload.userId
 
-}
+//}
+
+const getUserByToken = async (req, res, next) => {
+  try {
+    //step 1 ambil token
+    const header = req.headers;
+    const authorization = header.authorization;
+    let token;
+
+    if (authorization !== undefined && authorization.startsWith('Bearer ')) {
+      token = authorization.substring(7);
+    }
+    // } else {
+    //   const error = new Error('You need to login');
+    //   error.statusCode = 403;
+    //   throw error;
+    // }
+
+    //step 2 ekstrak payload menggunakan jwt.verify
+    const decoded = jwt.verify(token, key);
+
+    //step 3 cari user berdasarkan payload.userId
+    const currentUser = await User.findByPk(decoded.userId, {
+      attributes: ['id', 'fullName', 'nim', 'angkatan', 'profilePicture', 'divisionId'],
+      include: {
+        model: Division,
+        attributes: ['name'], // Fix: Use 'name' instead of 'Division.name'
+      },
+    });
+
+    if (!currentUser) {
+      const error = new Error(`User with id ${decoded.userId} not found`);
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const responseUser = {
+      id: currentUser.id,
+      fullName: currentUser.fullName,
+      angkatan: currentUser.angkatan,
+      division: {
+        name: currentUser.division.name,
+      },
+      
+    };
+
+    res.status(200).json({
+      status: 'Success',
+      message: 'Successfully fetch user data',
+      user: responseUser,
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      status: 'Error',
+      message: error.message,
+    });
+  }
+};
+
+
+const updateUserByToken = async (req, res, next) => {
+  try {
+    // Step 1: Get the token from the request headers
+    const header = req.headers;
+    const authorization = header.authorization;
+    let token;
+
+    if (authorization !== undefined && authorization.startsWith('Bearer ')) {
+      token = authorization.substring(7);
+    } else {
+      const error = new Error('You need to login');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    // Step 2: Extract payload using jwt.verify
+    const decoded = jwt.verify(token, key);
+
+    // Step 3: Find the user based on payload.userId
+    const currentUser = await User.findByPk(decoded.userId);
+
+    if (!currentUser) {
+      const error = new Error(`User with id ${decoded.userId} not found`);
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // Step 4: Update user data based on the request body
+    const { fullName, nim, angkatan, email, password, division } = req.body;
+
+    // Update user fields if provided in the request body
+    if (fullName) currentUser.fullName = fullName;
+    if (nim) currentUser.nim = nim;
+    if (angkatan) currentUser.angkatan = angkatan;
+    if (email) currentUser.email = email;
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 5);
+      currentUser.password = hashedPassword;
+    }
+    if (division) {
+      const userDivision = await Division.findOne({
+        where: {
+          name: division,
+        },
+      });
+
+      if (!userDivision) {
+        const error = new Error(`Division ${division} is not existed!`);
+        error.statusCode = 400;
+        throw error;
+      }
+
+      currentUser.divisionId = userDivision.id;
+    }
+
+    // Step 5: Save the updated user
+    await currentUser.save();
+
+    res.status(200).json({
+      status: 'Success',
+      message: 'User updated successfully',
+      user: currentUser,
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      status: 'Error',
+      message: error.message,
+    });
+  }
+};
+
 
 module.exports = {
   getAllUser, getUserById, postUser, deleteUser, loginHandler, getUserByToken, updateUserByToken
